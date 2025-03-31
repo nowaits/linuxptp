@@ -113,7 +113,7 @@ static int open_socket(const char *name, struct in_addr mc_addr[2], short port,
 		pr_err("setsockopt SO_REUSEADDR failed: %m");
 		goto no_option;
 	}
-	if (bind(fd, (struct sockaddr *) &addr, sizeof(addr))) {
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
 		pr_err("bind failed: %m");
 		goto no_option;
 	}

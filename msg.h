@@ -24,6 +24,7 @@
 #include <sys/queue.h>
 #include <time.h>
 #include <asm/byteorder.h>
+#include <assert.h>
 
 #include "address.h"
 #include "ddt.h"
@@ -360,11 +361,6 @@ static inline int msg_type(const struct ptp_message *m)
  * @return Pointer to a message on success, NULL otherwise.
  */
 struct ptp_message *msg_allocate(void);
-
-/**
- * Release all of the memory in the message cache.
- */
-void msg_cleanup(void);
 
 /**
  * Duplicate a message instance.

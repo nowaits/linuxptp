@@ -159,6 +159,14 @@ static int clock_resize_pollfd(struct clock *c, int new_nports);
 static void clock_remove_port(struct clock *c, struct port *p);
 static void clock_stats_display(struct clock_stats *s);
 
+#ifdef __SANITIZE_ADDRESS__
+const char *
+__asan_default_options(void)
+{
+    return "verbosity=0:unmap_shadow_on_exit=1:disable_coredump=0:abort_on_error=1:detect_leaks=1";
+}
+#endif
+
 static int clock_alttime_offset_append(struct clock *c, int key, struct ptp_message *m)
 {
 	struct alternate_time_offset_indicator_tlv *atoi;
@@ -371,7 +379,6 @@ void clock_destroy(struct clock *c)
 		clockcheck_destroy(c->sanity_check);
 	}
 	memset(c, 0, sizeof(*c));
-	msg_cleanup();
 	tc_cleanup();
 }
 
@@ -436,11 +443,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 	int datalen = 0;
 	uint8_t key;
 
-	extra = tlv_extra_alloc();
-	if (!extra) {
-		pr_err("failed to allocate TLV descriptor");
-		return 0;
-	}
+	extra = calloc(1, sizeof(*extra));
 	extra->tlv = (struct TLV *) rsp->management.suffix;
 
 	tlv = (struct management_tlv *) rsp->management.suffix;
@@ -448,64 +451,64 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 	tlv->id = id;
 
 	switch (id) {
-	case MID_USER_DESCRIPTION:
+	case MID_C_USER_DESCRIPTION:
 		text = (struct PTPText *) tlv->data;
 		text->length = c->desc.userDescription.length;
 		memcpy(text->text, c->desc.userDescription.text, text->length);
 		datalen = 1 + text->length;
 		break;
-	case MID_DEFAULT_DATA_SET:
+	case MID_C_DEFAULT_DATA_SET:
 		memcpy(tlv->data, &c->dds, sizeof(c->dds));
 		datalen = sizeof(c->dds);
 		break;
-	case MID_CURRENT_DATA_SET:
+	case MID_C_CURRENT_DATA_SET:
 		memcpy(tlv->data, &c->cur, sizeof(c->cur));
 		datalen = sizeof(c->cur);
 		break;
-	case MID_PARENT_DATA_SET:
+	case MID_C_PARENT_DATA_SET:
 		memcpy(tlv->data, &c->dad.pds, sizeof(c->dad.pds));
 		datalen = sizeof(c->dad.pds);
 		break;
-	case MID_TIME_PROPERTIES_DATA_SET:
+	case MID_C_TIME_PROPERTIES_DATA_SET:
 		memcpy(tlv->data, &c->tds, sizeof(c->tds));
 		datalen = sizeof(c->tds);
 		break;
-	case MID_PRIORITY1:
+	case MID_C_PRIORITY1:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->dds.priority1;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_PRIORITY2:
+	case MID_C_PRIORITY2:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->dds.priority2;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_DOMAIN:
+	case MID_C_DOMAIN:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->dds.domainNumber;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_SLAVE_ONLY:
+	case MID_C_SLAVE_ONLY:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->dds.flags & DDS_SLAVE_ONLY ? 1 : 0;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_CLOCK_ACCURACY:
+	case MID_C_CLOCK_ACCURACY:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->dds.clockQuality.clockAccuracy;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_TRACEABILITY_PROPERTIES:
+	case MID_C_TRACEABILITY_PROPERTIES:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->tds.flags & (TIME_TRACEABLE|FREQ_TRACEABLE);
 		datalen = sizeof(*mtd);
 		break;
-	case MID_TIMESCALE_PROPERTIES:
+	case MID_C_TIMESCALE_PROPERTIES:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->tds.flags & PTP_TIMESCALE;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_ENABLE:
+	case MID_C_ALTERNATE_TIME_OFFSET_ENABLE:
 		key = clock_alttime_offset_get_key(req);
 		if (key >= MAX_TIME_ZONES) {
 			break;
@@ -515,7 +518,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		mtd->reserved = c->tz[key].enabled ? 1 : 0;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_NAME:
+	case MID_C_ALTERNATE_TIME_OFFSET_NAME:
 		key = clock_alttime_offset_get_key(req);
 		if (key >= MAX_TIME_ZONES) {
 			break;
@@ -525,7 +528,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		ptp_text_copy(&aton->displayName, &c->tz[key].display_name);
 		datalen = sizeof(*aton) + aton->displayName.length;
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_PROPERTIES:
+	case MID_C_ALTERNATE_TIME_OFFSET_PROPERTIES:
 		key = clock_alttime_offset_get_key(req);
 		if (key >= MAX_TIME_ZONES) {
 			break;
@@ -543,7 +546,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		       sizeof(atop->timeOfNextJump.seconds_msb));
 		datalen = sizeof(*atop);
 		break;
-	case MID_TIME_STATUS_NP:
+	case MID_C_TIME_STATUS_NP:
 		tsn = (struct time_status_np *) tlv->data;
 		tsn->master_offset = tmv_to_nanoseconds(c->master_offset);
 		tsn->ingress_time = tmv_to_nanoseconds(c->ingress_ts);
@@ -560,7 +563,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		tsn->gmIdentity = c->dad.pds.grandmasterIdentity;
 		datalen = sizeof(*tsn);
 		break;
-	case MID_GRANDMASTER_SETTINGS_NP:
+	case MID_C_GRANDMASTER_SETTINGS_NP:
 		gsn = (struct grandmaster_settings_np *) tlv->data;
 		gsn->clockQuality = c->dds.clockQuality;
 		gsn->utc_offset = c->utc_offset;
@@ -568,7 +571,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		gsn->time_source = c->time_source;
 		datalen = sizeof(*gsn);
 		break;
-	case MID_SUBSCRIBE_EVENTS_NP:
+	case MID_C_SUBSCRIBE_EVENTS_NP:
 		if (p != c->uds_rw_port) {
 			/* Only the UDS-RW port allowed. */
 			break;
@@ -578,12 +581,12 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		memcpy(&sen->duration, &duration, sizeof(sen->duration));
 		datalen = sizeof(*sen);
 		break;
-	case MID_SYNCHRONIZATION_UNCERTAIN_NP:
+	case MID_C_SYNCHRONIZATION_UNCERTAIN_NP:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = c->local_sync_uncertain;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_EXTERNAL_GRANDMASTER_PROPERTIES_NP:
+	case MID_C_EXTERNAL_GRANDMASTER_PROPERTIES_NP:
 		egpn = (struct external_grandmaster_properties_np *) tlv->data;
 		egpn->gmIdentity = c->ext_gm_identity;
 		egpn->stepsRemoved = c->ext_gm_steps_removed;
@@ -591,7 +594,7 @@ static int clock_management_fill_response(struct clock *c, struct port *p,
 		break;
 	default:
 		/* The caller should *not* respond to this message. */
-		tlv_extra_recycle(extra);
+		free(extra);
 		return 0;
 	}
 	if (datalen % 2) {
@@ -639,19 +642,19 @@ static int clock_management_set(struct clock *c, struct port *p,
 	tlv = (struct management_tlv *) req->management.suffix;
 
 	switch (id) {
-	case MID_PRIORITY1:
+	case MID_C_PRIORITY1:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		c->dds.priority1 = mtd->val;
 		*changed = 1;
 		respond = 1;
 		break;
-	case MID_PRIORITY2:
+	case MID_C_PRIORITY2:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		c->dds.priority2 = mtd->val;
 		*changed = 1;
 		respond = 1;
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_ENABLE:
+	case MID_C_ALTERNATE_TIME_OFFSET_ENABLE:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		key = mtd->val;
 		if (key == 0xff) {
@@ -665,7 +668,7 @@ static int clock_management_set(struct clock *c, struct port *p,
 			respond = 1;
 		}
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_NAME:
+	case MID_C_ALTERNATE_TIME_OFFSET_NAME:
 		aton = (struct alternate_time_offset_name *) tlv->data;
 		key = aton->keyField;
 		if (key < MAX_TIME_ZONES &&
@@ -673,7 +676,7 @@ static int clock_management_set(struct clock *c, struct port *p,
 			respond = 1;
 		}
 		break;
-	case MID_ALTERNATE_TIME_OFFSET_PROPERTIES:
+	case MID_C_ALTERNATE_TIME_OFFSET_PROPERTIES:
 		atop = (struct alternate_time_offset_properties *) tlv->data;
 		key = atop->keyField;
 		if (key < MAX_TIME_ZONES) {
@@ -689,7 +692,7 @@ static int clock_management_set(struct clock *c, struct port *p,
 			respond = 1;
 		}
 		break;
-	case MID_GRANDMASTER_SETTINGS_NP:
+	case MID_C_GRANDMASTER_SETTINGS_NP:
 		gsn = (struct grandmaster_settings_np *) tlv->data;
 		c->dds.clockQuality = gsn->clockQuality;
 		c->utc_offset = gsn->utc_offset;
@@ -698,12 +701,12 @@ static int clock_management_set(struct clock *c, struct port *p,
 		*changed = 1;
 		respond = 1;
 		break;
-	case MID_SUBSCRIBE_EVENTS_NP:
+	case MID_C_SUBSCRIBE_EVENTS_NP:
 		sen = (struct subscribe_events_np *)tlv->data;
 		clock_update_subscription(c, req, sen->bitmask, sen->duration);
 		respond = 1;
 		break;
-	case MID_SYNCHRONIZATION_UNCERTAIN_NP:
+	case MID_C_SYNCHRONIZATION_UNCERTAIN_NP:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		switch (mtd->val) {
 		case SYNC_UNCERTAIN_DONTCARE:
@@ -718,7 +721,7 @@ static int clock_management_set(struct clock *c, struct port *p,
 			break;
 		}
 		break;
-	case MID_EXTERNAL_GRANDMASTER_PROPERTIES_NP:
+	case MID_C_EXTERNAL_GRANDMASTER_PROPERTIES_NP:
 		egpn = (struct external_grandmaster_properties_np *) tlv->data;
 		c->ext_gm_identity = egpn->gmIdentity;
 		c->ext_gm_steps_removed = egpn->stepsRemoved;
@@ -844,6 +847,7 @@ static int clock_compare_pds(struct parentDS *pds1, struct parentDS *pds2)
 	return memcmp(pds1, pds2, sizeof (*pds1));
 }
 
+// 1588v2-2008 9.3.5
 static void clock_update_grandmaster(struct clock *c)
 {
 	struct parentDS *pds = &c->dad.pds, old_pds = *pds;
@@ -875,6 +879,7 @@ static void clock_update_grandmaster(struct clock *c)
 		clock_notify_event(c, NOTIFY_PARENT_DATA_SET);
 }
 
+// 1588v2-2008 9.3.5
 static void clock_update_slave(struct clock *c)
 {
 	struct parentDS *pds = &c->dad.pds, old_pds = *pds;
@@ -1485,6 +1490,7 @@ struct dataset *clock_default_ds(struct clock *c)
 	struct dataset *out = &c->default_dataset;
 	struct defaultDS *in = &c->dds;
 
+	// 9.3.4 Table 12 data set is D0
 	out->priority1              = in->priority1;
 	out->identity               = in->clockIdentity;
 	out->quality                = in->clockQuality;
@@ -1682,13 +1688,13 @@ int clock_manage(struct clock *c, struct port *p, struct ptp_message *msg)
 			return changed;
 		break;
 	case SET:
-		if (mgt->length == 2 && mgt->id != MID_NULL_MANAGEMENT) {
-			clock_management_send_error(p, msg, MID_WRONG_LENGTH);
+		if (mgt->length == 2 && mgt->id != MID_P_NULL_MANAGEMENT) {
+			clock_management_send_error(p, msg, MID_E_WRONG_LENGTH);
 			return changed;
 		}
 		if (p != c->uds_rw_port) {
 			/* Sorry, only allowed on the UDS-RW port. */
-			clock_management_send_error(p, msg, MID_NOT_SUPPORTED);
+			clock_management_send_error(p, msg, MID_E_NOT_SUPPORTED);
 			return changed;
 		}
 		if (clock_management_set(c, p, mgt->id, msg, &changed))
@@ -1697,7 +1703,7 @@ int clock_manage(struct clock *c, struct port *p, struct ptp_message *msg)
 	case COMMAND:
 		if (p != c->uds_rw_port) {
 			/* Sorry, only allowed on the UDS-RW port. */
-			clock_management_send_error(p, msg, MID_NOT_SUPPORTED);
+			clock_management_send_error(p, msg, MID_E_NOT_SUPPORTED);
 			return changed;
 		}
 		break;
@@ -1706,48 +1712,48 @@ int clock_manage(struct clock *c, struct port *p, struct ptp_message *msg)
 	}
 
 	switch (mgt->id) {
-	case MID_PORT_PROPERTIES_NP:
-	case MID_PORT_HWCLOCK_NP:
+	case MID_P_PORT_PROPERTIES_NP:
+	case MID_P_PORT_HWCLOCK_NP:
 		if (p != c->uds_rw_port) {
 			/* Only the UDS-RW port allowed. */
-			clock_management_send_error(p, msg, MID_NOT_SUPPORTED);
+			clock_management_send_error(p, msg, MID_E_NOT_SUPPORTED);
 			return 0;
 		}
 	}
 
 	switch (mgt->id) {
-	case MID_USER_DESCRIPTION:
-	case MID_SAVE_IN_NON_VOLATILE_STORAGE:
-	case MID_RESET_NON_VOLATILE_STORAGE:
-	case MID_INITIALIZE:
-	case MID_FAULT_LOG:
-	case MID_FAULT_LOG_RESET:
-	case MID_DEFAULT_DATA_SET:
-	case MID_CURRENT_DATA_SET:
-	case MID_PARENT_DATA_SET:
-	case MID_TIME_PROPERTIES_DATA_SET:
-	case MID_PRIORITY1:
-	case MID_PRIORITY2:
-	case MID_DOMAIN:
-	case MID_SLAVE_ONLY:
-	case MID_TIME:
-	case MID_CLOCK_ACCURACY:
-	case MID_UTC_PROPERTIES:
-	case MID_TRACEABILITY_PROPERTIES:
-	case MID_TIMESCALE_PROPERTIES:
-	case MID_PATH_TRACE_LIST:
-	case MID_PATH_TRACE_ENABLE:
-	case MID_GRANDMASTER_CLUSTER_TABLE:
-	case MID_ACCEPTABLE_MASTER_TABLE:
-	case MID_ACCEPTABLE_MASTER_MAX_TABLE_SIZE:
-	case MID_ALTERNATE_TIME_OFFSET_MAX_KEY:
-	case MID_TRANSPARENT_CLOCK_DEFAULT_DATA_SET:
-	case MID_PRIMARY_DOMAIN:
-	case MID_TIME_STATUS_NP:
-	case MID_GRANDMASTER_SETTINGS_NP:
-	case MID_SUBSCRIBE_EVENTS_NP:
-	case MID_SYNCHRONIZATION_UNCERTAIN_NP:
-		clock_management_send_error(p, msg, MID_NOT_SUPPORTED);
+	case MID_C_USER_DESCRIPTION:
+	case MID_C_SAVE_IN_NON_VOLATILE_STORAGE:
+	case MID_C_RESET_NON_VOLATILE_STORAGE:
+	case MID_C_INITIALIZE:
+	case MID_C_FAULT_LOG:
+	case MID_C_FAULT_LOG_RESET:
+	case MID_C_DEFAULT_DATA_SET:
+	case MID_C_CURRENT_DATA_SET:
+	case MID_C_PARENT_DATA_SET:
+	case MID_C_TIME_PROPERTIES_DATA_SET:
+	case MID_C_PRIORITY1:
+	case MID_C_PRIORITY2:
+	case MID_C_DOMAIN:
+	case MID_C_SLAVE_ONLY:
+	case MID_C_TIME:
+	case MID_C_CLOCK_ACCURACY:
+	case MID_C_UTC_PROPERTIES:
+	case MID_C_TRACEABILITY_PROPERTIES:
+	case MID_C_TIMESCALE_PROPERTIES:
+	case MID_C_PATH_TRACE_LIST:
+	case MID_C_PATH_TRACE_ENABLE:
+	case MID_C_GRANDMASTER_CLUSTER_TABLE:
+	case MID_C_ACCEPTABLE_MASTER_TABLE:
+	case MID_C_ACCEPTABLE_MASTER_MAX_TABLE_SIZE:
+	case MID_C_ALTERNATE_TIME_OFFSET_MAX_KEY:
+	case MID_C_TRANSPARENT_CLOCK_DEFAULT_DATA_SET:
+	case MID_C_PRIMARY_DOMAIN:
+	case MID_C_TIME_STATUS_NP:
+	case MID_C_GRANDMASTER_SETTINGS_NP:
+	case MID_C_SUBSCRIBE_EVENTS_NP:
+	case MID_C_SYNCHRONIZATION_UNCERTAIN_NP:
+		clock_management_send_error(p, msg, MID_E_NOT_SUPPORTED);
 		break;
 	default:
 		answers = 0;
@@ -1760,8 +1766,8 @@ int clock_manage(struct clock *c, struct port *p, struct ptp_message *msg)
 		}
 		if (!answers) {
 			/* IEEE 1588 Interpretation #21 suggests to use
-			 * MID_WRONG_VALUE for ports that do not exist */
-			clock_management_send_error(p, msg, MID_WRONG_VALUE);
+			 * MID_E_WRONG_VALUE for ports that do not exist */
+			clock_management_send_error(p, msg, MID_E_WRONG_VALUE);
 		}
 		break;
 	}
@@ -1783,10 +1789,10 @@ void clock_notify_event(struct clock *c, enum notification event)
 
 	switch (event) {
 	case NOTIFY_TIME_SYNC:
-		id = MID_TIME_STATUS_NP;
+		id = MID_C_TIME_STATUS_NP;
 		break;
 	case NOTIFY_PARENT_DATA_SET:
-		id = MID_PARENT_DATA_SET;
+		id = MID_C_PARENT_DATA_SET;
 		break;
 	default:
 		return;

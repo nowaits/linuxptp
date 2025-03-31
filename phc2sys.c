@@ -939,7 +939,7 @@ static int phc2sys_recv_subscribed(void *context, struct ptp_message *msg,
 	if (mgt_id == excluded)
 		return 0;
 	switch (mgt_id) {
-	case MID_PORT_DATA_SET:
+	case MID_P_PORT_DATA_SET:
 		pds = management_tlv_data(msg);
 		port = port_get(domain, pds->portIdentity.portNumber);
 		if (!port) {
@@ -1613,7 +1613,6 @@ end:
 		port_cleanup(&domains[i]);
 	}
 	config_destroy(cfg);
-	msg_cleanup();
 	return r;
 bad_usage:
 	usage(progname);

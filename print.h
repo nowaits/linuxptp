@@ -28,7 +28,7 @@
 #define PRINT_LEVEL_MAX LOG_DEBUG
 
 #ifdef __GNUC__
-__attribute__ ((format (printf, 2, 3)))
+    __attribute__((format(printf, 2, 3)))
 #endif
 void print(int level, char const *format, ...);
 
@@ -51,14 +51,22 @@ extern int print_level;
 
 static inline int print_get_level(void)
 {
-	return print_level;
+    return print_level;
 }
 
-#define PRINT_CL(l, x...) /* PRINT Check Level */	\
-do {							\
-	if (print_get_level() >= l)			\
-		print(l, x);				\
-} while (0)
+
+#define LOG_PRINT(l, _fmt, args...)                    \
+    print(l, "[%s:%d %s] %s "_fmt"%c",              \
+        __FILE__, __LINE__,  \
+        __FUNCTION__, _ls, ##args,                  \
+        ' ');  \
+
+#define PRINT_CL(l, x...) /* PRINT Check Level */   \
+    do {                            \
+        const char* _ls = #l;                   \
+        if (print_get_level() >= l)         \
+            LOG_PRINT(l, x);                \
+    } while (0)
 
 #define pr_emerg(x...)   PRINT_CL(LOG_EMERG, x)
 #define pr_alert(x...)   PRINT_CL(LOG_ALERT, x)
@@ -70,11 +78,12 @@ do {							\
 #define pr_debug(x...)   PRINT_CL(LOG_DEBUG, x)
 
 #define PRINT_RL(l, i, x...) \
-	do { \
-		static time_t last = -i; \
-		if (!rate_limited(i, &last)) \
-			print(l, x); \
-	} while (0);
+    do { \
+        static time_t last = -i; \
+        const char* _ls = #l;                   \
+        if (!rate_limited(i, &last)) \
+            LOG_PRINT(l, x); \
+    } while (0);
 
 /* Rate limited versions */
 #define pl_emerg(i, x...)   PRINT_RL(LOG_EMERG, i, x)

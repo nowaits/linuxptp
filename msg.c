@@ -31,36 +31,6 @@
 int assume_two_step = 0;
 uint8_t ptp_hdr_ver = PTP_VERSION;
 
-/*
- * Head room fits a VLAN Ethernet header, and 'msg' is 64 bit aligned.
- */
-#define MSG_HEADROOM 24
-
-struct message_storage {
-	unsigned char reserved[MSG_HEADROOM];
-	struct ptp_message msg __attribute__((aligned (8)));
-};
-
-static TAILQ_HEAD(msg_pool, ptp_message) msg_pool = TAILQ_HEAD_INITIALIZER(msg_pool);
-
-static struct {
-	int total;
-	int count;
-} pool_stats;
-
-#ifdef DEBUG_POOL
-static void pool_debug(const char *str, void *addr)
-{
-	fprintf(stderr, "*** %p %10s total %d count %d used %d\n",
-		addr, str, pool_stats.total, pool_stats.count,
-		pool_stats.total - pool_stats.count);
-}
-#else
-static void pool_debug(const char *str, void *addr)
-{
-}
-#endif
-
 static void announce_pre_send(struct announce_msg *m)
 {
 	m->currentUtcOffset = htons(m->currentUtcOffset);
@@ -151,11 +121,7 @@ static struct tlv_extra *msg_tlv_prepare(struct ptp_message *msg, int length)
 	}
 
 	/* Allocate a TLV descriptor and setup the pointer. */
-	extra = tlv_extra_alloc();
-	if (!extra) {
-		pr_err("failed to allocate TLV descriptor");
-		return NULL;
-	}
+	extra = calloc(1, sizeof(*extra));
 	extra->tlv = (struct TLV *) ptr;
 
 	return extra;
@@ -167,7 +133,7 @@ static void msg_tlv_recycle(struct ptp_message *msg)
 
 	while ((extra = TAILQ_FIRST(&msg->tlv_list)) != NULL) {
 		TAILQ_REMOVE(&msg->tlv_list, extra, list);
-		tlv_extra_recycle(extra);
+		free(extra);
 	}
 }
 
@@ -193,23 +159,19 @@ static int suffix_post_recv(struct ptp_message *msg, int len)
 	msg_tlv_recycle(msg);
 
 	while (len >= sizeof(struct TLV)) {
-		extra = tlv_extra_alloc();
-		if (!extra) {
-			pr_err("failed to allocate TLV descriptor");
-			return -ENOMEM;
-		}
+		extra = calloc(1, sizeof(struct tlv_extra));
 		extra->tlv = (struct TLV *) ptr;
 		extra->tlv->type = ntohs(extra->tlv->type);
 		extra->tlv->length = ntohs(extra->tlv->length);
 		if (extra->tlv->length % 2) {
-			tlv_extra_recycle(extra);
+			free(extra);
 			return -EBADMSG;
 		}
 		suffix_len += sizeof(struct TLV);
 		len -= sizeof(struct TLV);
 		ptr += sizeof(struct TLV);
 		if (extra->tlv->length > len) {
-			tlv_extra_recycle(extra);
+			free(extra);
 			return -EBADMSG;
 		}
 		suffix_len += extra->tlv->length;
@@ -217,7 +179,7 @@ static int suffix_post_recv(struct ptp_message *msg, int len)
 		ptr += extra->tlv->length;
 		err = tlv_post_recv(extra);
 		if (err) {
-			tlv_extra_recycle(extra);
+			free(extra);
 			return err;
 		}
 		msg_tlv_attach(msg, extra);
@@ -258,42 +220,14 @@ static void timestamp_pre_send(struct Timestamp *ts)
 
 struct ptp_message *msg_allocate(void)
 {
-	struct message_storage *s;
-	struct ptp_message *m = TAILQ_FIRST(&msg_pool);
-
-	if (m) {
-		TAILQ_REMOVE(&msg_pool, m, list);
-		pool_stats.count--;
-		pool_debug("dequeue", m);
-	} else {
-		s = malloc(sizeof(*s));
-		if (s) {
-			m = &s->msg;
-			pool_stats.total++;
-			pool_debug("allocate", m);
-		}
-	}
-	if (m) {
-		memset(m, 0, sizeof(*m));
-		m->refcnt = 1;
-		TAILQ_INIT(&m->tlv_list);
-	}
-
-	return m;
-}
-
-void msg_cleanup(void)
-{
-	struct message_storage *s;
 	struct ptp_message *m;
 
-	tlv_extra_cleanup();
+	m = calloc(1, sizeof(*m));
+	assert(m);
+	m->refcnt = 1;
+	TAILQ_INIT(&m->tlv_list);
 
-	while ((m = TAILQ_FIRST(&msg_pool)) != NULL) {
-		TAILQ_REMOVE(&msg_pool, m, list);
-		s = container_of(m, struct message_storage, msg);
-		free(s);
-	}
+	return m;
 }
 
 struct ptp_message *msg_duplicate(struct ptp_message *msg, int cnt)
@@ -302,9 +236,6 @@ struct ptp_message *msg_duplicate(struct ptp_message *msg, int cnt)
 	int err;
 
 	dup = msg_allocate();
-	if (!dup) {
-		return NULL;
-	}
 	memcpy(dup, msg, sizeof(*dup));
 	dup->refcnt = 1;
 	TAILQ_INIT(&dup->tlv_list);
@@ -531,7 +462,7 @@ int msg_tlv_copy(struct ptp_message *msg, struct ptp_message *dup) {
 
 	TAILQ_FOREACH(extra, &msg->tlv_list, list) {
 		tlv = (void *) extra->tlv - (void *) msg + (void *) dup;
-		dup_extra = tlv_extra_alloc();
+		dup_extra = calloc(1, sizeof(struct tlv_extra));
 		dup_extra->tlv = tlv;
 		msg_tlv_attach(dup, dup_extra);
 	}
@@ -606,10 +537,8 @@ void msg_put(struct ptp_message *m)
 	if (m->refcnt) {
 		return;
 	}
-	pool_stats.count++;
-	pool_debug("recycle", m);
 	msg_tlv_recycle(m);
-	TAILQ_INSERT_HEAD(&msg_pool, m, list);
+	free(m);
 }
 
 int msg_sots_missing(struct ptp_message *m)

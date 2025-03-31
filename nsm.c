@@ -659,7 +659,6 @@ int main(int argc, char *argv[])
 
 	nsm_close(nsm);
 out:
-	msg_cleanup();
 	sad_destroy(cfg);
 	config_destroy(cfg);
 	return err;

@@ -121,7 +121,7 @@ void tsproc_set_delay(struct tsproc *tsp, tmv_t delay)
 	tsp->filtered_delay_valid = 1;
 }
 
-tmv_t get_raw_delay(struct tsproc *tsp)
+static tmv_t get_raw_delay(struct tsproc *tsp)
 {
 	tmv_t t23, t41, delay;
 

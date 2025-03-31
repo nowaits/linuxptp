@@ -20,6 +20,7 @@
 #ifndef HAVE_FSM_H
 #define HAVE_FSM_H
 
+// 1588v2-2008 9.2.5
 /** Defines the state of a port. */
 enum port_state {
 	PS_INITIALIZING = 1,
@@ -34,6 +35,7 @@ enum port_state {
 	PS_GRAND_MASTER, /*non-standard extension*/
 };
 
+// 1588v2-2008 9.2.6
 /** Defines the events for the port state machine. */
 enum fsm_event {
 	EV_NONE,

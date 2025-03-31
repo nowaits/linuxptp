@@ -189,7 +189,7 @@ static int update_ptp_serivce(struct tzinfo *tz, struct tzinfo *next)
 	if (!pmc) {
 		return -1;
 	}
-	err = pmc_send_set_aton(pmc, MID_ALTERNATE_TIME_OFFSET_NAME,
+	err = pmc_send_set_aton(pmc, MID_C_ALTERNATE_TIME_OFFSET_NAME,
 				key_field, tz->display_name);
 	if (err) {
 		return err;
@@ -203,14 +203,14 @@ static int update_ptp_serivce(struct tzinfo *tz, struct tzinfo *next)
 		atop.timeOfNextJump.seconds_lsb = time_of_next_jump & 0xffffffff;
 		atop.timeOfNextJump.seconds_msb = time_of_next_jump >> 32;
 	}
-	err = pmc_send_set_action(pmc, MID_ALTERNATE_TIME_OFFSET_PROPERTIES,
+	err = pmc_send_set_action(pmc, MID_C_ALTERNATE_TIME_OFFSET_PROPERTIES,
 				  &atop, sizeof(atop));
 	if (err) {
 		return err;
 	}
 	mtd.val = key_field;
 	mtd.reserved = 1; /*enable field*/
-	err = pmc_send_set_action(pmc, MID_ALTERNATE_TIME_OFFSET_ENABLE,
+	err = pmc_send_set_action(pmc, MID_C_ALTERNATE_TIME_OFFSET_ENABLE,
 				  &mtd, sizeof(mtd));
 	if (err) {
 		return err;

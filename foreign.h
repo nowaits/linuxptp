@@ -25,6 +25,8 @@
 #include "ds.h"
 #include "port.h"
 
+// 9.3.2.4.4
+#define FOREIGN_MASTER_TIME_WINDOW 4
 #define FOREIGN_MASTER_THRESHOLD 2
 
 struct foreign_clock {

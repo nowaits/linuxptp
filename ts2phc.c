@@ -49,8 +49,6 @@ static void ts2phc_cleanup(struct ts2phc_private *priv)
 	 */
 	LIST_FOREACH_SAFE(p, &priv->ports, list, tmp)
 		free(p);
-
-	msg_cleanup();
 }
 
 static struct ts2phc_port *ts2phc_port_get(struct ts2phc_private *priv,
@@ -99,7 +97,7 @@ static int ts2phc_recv_subscribed(void *context, struct ptp_message *msg,
 		return 0;
 
 	switch (mgt_id) {
-	case MID_PORT_DATA_SET:
+	case MID_P_PORT_DATA_SET:
 		pds = management_tlv_data(msg);
 		port = ts2phc_port_get(priv, pds->portIdentity.portNumber);
 		if (!port) {

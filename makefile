@@ -17,10 +17,17 @@
 
 KBUILD_OUTPUT ?=
 
-DEBUG	=
+ifeq ($(DEBUG),1)
+EXTRA_CFLAGS ?= -g -O0 -fsanitize=address
+EXTRA_LDFLAGS ?= -fsanitize=address
+else
+EXTRA_CFLAGS ?= -g
+EXTRA_LDFLAGS ?=
+endif
+
 CC	= $(CROSS_COMPILE)gcc
 VER     = -DVER=$(version)
-CFLAGS	= -Wall $(VER) $(incdefs) $(DEBUG) $(EXTRA_CFLAGS)
+CFLAGS	= -Wall $(VER) $(incdefs) $(EXTRA_CFLAGS)
 LDLIBS	= -lm -lrt -pthread $(EXTRA_LDFLAGS)
 PRG	= ptp4l hwstamp_ctl nsm phc2sys phc_ctl pmc timemaster ts2phc tz2alt
 SECURITY = sad.o

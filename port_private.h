@@ -80,6 +80,7 @@ struct port {
 	struct foreign_clock *best;
 	enum syfu_state syfu;
 	struct ptp_message *last_syncfup;
+#define DELAY_RESP_TIMEOUT 5 // seconds
 	TAILQ_HEAD(delay_req, ptp_message) delay_req;
 	struct ptp_message *peer_delay_req;
 	struct ptp_message *peer_delay_resp;

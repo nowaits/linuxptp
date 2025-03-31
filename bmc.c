@@ -21,6 +21,15 @@
 #include "bmc.h"
 #include "ds.h"
 
+/**
+ * 
+ * @note: 协议说明
+ * 
+ * D0：defaultDS data
+ * Erbest: port best
+ * Ebest: all port best
+ * 
+ */
 static int portid_cmp(struct PortIdentity *a, struct PortIdentity *b)
 {
 	int diff = memcmp(&a->clockIdentity, &b->clockIdentity, sizeof(a->clockIdentity));
@@ -32,6 +41,7 @@ static int portid_cmp(struct PortIdentity *a, struct PortIdentity *b)
 	return diff;
 }
 
+// 9.3.4 Figure 28
 int dscmp2(struct dataset *a, struct dataset *b)
 {
 	int diff;
@@ -80,6 +90,7 @@ int dscmp2(struct dataset *a, struct dataset *b)
 	return 0;
 }
 
+// 9.3.4 Figure 27
 int dscmp(struct dataset *a, struct dataset *b)
 {
 	int diff;
@@ -126,15 +137,16 @@ int dscmp(struct dataset *a, struct dataset *b)
 	return diff < 0 ? A_BETTER : B_BETTER;
 }
 
+// 9.3.3 Figure 26
 enum port_state bmc_state_decision(struct clock *c, struct port *r,
 				   int (*compare)(struct dataset *a, struct dataset *b))
 {
 	struct dataset *clock_ds, *clock_best, *port_best;
 	enum port_state ps;
 
-	clock_ds = clock_default_ds(c);
-	clock_best = clock_best_foreign(c);
-	port_best = port_best_foreign(r);
+	clock_ds = clock_default_ds(c); // D0
+	clock_best = clock_best_foreign(c); // Ebest
+	port_best = port_best_foreign(r); // Erbest
 	ps = port_state(r);
 
 	/*

@@ -78,6 +78,7 @@ static int announce_compare(struct ptp_message *m1, struct ptp_message *m2)
 static void announce_to_dataset(struct ptp_message *m, struct port *p,
 				struct dataset *out)
 {
+	// 9.3.4 Table 12 data set is E(best) or E(rbest)
 	struct announce_msg *a = &m->announce;
 	out->priority1    = a->grandmasterPriority1;
 	out->identity     = a->grandmasterIdentity;
@@ -340,7 +341,7 @@ static void fc_prune(struct foreign_clock *fc)
 
 static int delay_req_current(struct ptp_message *m, struct timespec now)
 {
-	int64_t t1, t2, tmo = 5 * NSEC_PER_SEC;
+	int64_t t1, t2, tmo = DELAY_RESP_TIMEOUT * NSEC_PER_SEC;
 
 	t1 = m->ts.host.tv_sec * NSEC_PER_SEC + m->ts.host.tv_nsec;
 	t2 = now.tv_sec * NSEC_PER_SEC + now.tv_nsec;
@@ -929,11 +930,7 @@ static int port_management_fill_response(struct port *target,
 	uint8_t *buf;
 	int datalen;
 
-	extra = tlv_extra_alloc();
-	if (!extra) {
-		pr_err("failed to allocate TLV descriptor");
-		return 0;
-	}
+	extra = calloc(1, sizeof(struct tlv_extra));
 	extra->tlv = (struct TLV *) rsp->management.suffix;
 
 	tlv = (struct management_tlv *) rsp->management.suffix;
@@ -941,10 +938,10 @@ static int port_management_fill_response(struct port *target,
 	tlv->id = id;
 
 	switch (id) {
-	case MID_NULL_MANAGEMENT:
+	case MID_P_NULL_MANAGEMENT:
 		datalen = 0;
 		break;
-	case MID_CLOCK_DESCRIPTION:
+	case MID_P_CLOCK_DESCRIPTION:
 		cd = &extra->cd;
 		buf = tlv->data;
 		cd->clockType = (UInteger16 *) buf;
@@ -1018,7 +1015,7 @@ static int port_management_fill_response(struct port *target,
 		buf += PROFILE_ID_LEN;
 		datalen = buf - tlv->data;
 		break;
-	case MID_PORT_DATA_SET:
+	case MID_P_PORT_DATA_SET:
 		pds = (struct portDS *) tlv->data;
 		pds->portIdentity            = target->portIdentity;
 		if (target->state == PS_GRAND_MASTER) {
@@ -1040,32 +1037,32 @@ static int port_management_fill_response(struct port *target,
 		pds->versionNumber           = target->versionNumber;
 		datalen = sizeof(*pds);
 		break;
-	case MID_LOG_ANNOUNCE_INTERVAL:
+	case MID_P_LOG_ANNOUNCE_INTERVAL:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->logAnnounceInterval;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_ANNOUNCE_RECEIPT_TIMEOUT:
+	case MID_P_ANNOUNCE_RECEIPT_TIMEOUT:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->announceReceiptTimeout;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_LOG_SYNC_INTERVAL:
+	case MID_P_LOG_SYNC_INTERVAL:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->logSyncInterval;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_VERSION_NUMBER:
+	case MID_P_VERSION_NUMBER:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->versionNumber;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_MASTER_ONLY:
+	case MID_P_MASTER_ONLY:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->master_only;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_DELAY_MECHANISM:
+	case MID_P_DELAY_MECHANISM:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		if (target->delayMechanism)
 			mtd->val = target->delayMechanism;
@@ -1073,18 +1070,18 @@ static int port_management_fill_response(struct port *target,
 			mtd->val = DM_E2E;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_LOG_MIN_PDELAY_REQ_INTERVAL:
+	case MID_P_LOG_MIN_PDELAY_REQ_INTERVAL:
 		mtd = (struct management_tlv_datum *) tlv->data;
 		mtd->val = target->logMinPdelayReqInterval;
 		datalen = sizeof(*mtd);
 		break;
-	case MID_PORT_DATA_SET_NP:
+	case MID_P_PORT_DATA_SET_NP:
 		pdsnp = (struct port_ds_np *) tlv->data;
 		pdsnp->neighborPropDelayThresh = target->neighborPropDelayThresh;
 		pdsnp->asCapable = target->asCapable;
 		datalen = sizeof(*pdsnp);
 		break;
-	case MID_PORT_PROPERTIES_NP:
+	case MID_P_PORT_PROPERTIES_NP:
 		ppn = (struct port_properties_np *)tlv->data;
 		ppn->portIdentity = target->portIdentity;
 		if (target->state == PS_GRAND_MASTER)
@@ -1096,19 +1093,19 @@ static int port_management_fill_response(struct port *target,
 		ptp_text_set(&ppn->interface, ts_label);
 		datalen = sizeof(*ppn) + ppn->interface.length;
 		break;
-	case MID_PORT_STATS_NP:
+	case MID_P_PORT_STATS_NP:
 		psn = (struct port_stats_np *)tlv->data;
 		psn->portIdentity = target->portIdentity;
 		psn->stats = target->stats;
 		datalen = sizeof(*psn);
 		break;
-	case MID_PORT_SERVICE_STATS_NP:
+	case MID_P_PORT_SERVICE_STATS_NP:
 		pssn = (struct port_service_stats_np *)tlv->data;
 		pssn->portIdentity = target->portIdentity;
 		pssn->stats = target->service_stats;
 		datalen = sizeof(*pssn);
 		break;
-	case MID_UNICAST_MASTER_TABLE_NP:
+	case MID_P_UNICAST_MASTER_TABLE_NP:
 		umtn = (struct unicast_master_table_np *)tlv->data;
 		buf = tlv->data + sizeof(umtn->actual_table_size);
 		if (!unicast_client_enabled(target)) {
@@ -1150,7 +1147,7 @@ static int port_management_fill_response(struct port *target,
 		}
 		datalen = buf - tlv->data;
 		break;
-	case MID_PORT_HWCLOCK_NP:
+	case MID_P_PORT_HWCLOCK_NP:
 		phn = (struct port_hwclock_np *)tlv->data;
 		phn->portIdentity = target->portIdentity;
 		phn->phc_index = target->phc_index;
@@ -1158,12 +1155,12 @@ static int port_management_fill_response(struct port *target,
 			PORT_HWCLOCK_VCLOCK : 0;
 		datalen = sizeof(*phn);
 		break;
-	case MID_POWER_PROFILE_SETTINGS_NP:
+	case MID_P_POWER_PROFILE_SETTINGS_NP:
 		pwr = (struct ieee_c37_238_settings_np *)tlv->data;
 		memcpy(pwr, &target->pwr, sizeof(*pwr));
 		datalen = sizeof(*pwr);
 		break;
-	case MID_CMLDS_INFO_NP:
+	case MID_P_CMLDS_INFO_NP:
 		cmlds = (struct cmlds_info_np *)tlv->data;
 		cmlds->meanLinkDelay = target->peerMeanPathDelay;
 		cmlds->scaledNeighborRateRatio =
@@ -1171,7 +1168,7 @@ static int port_management_fill_response(struct port *target,
 		cmlds->as_capable = target->asCapable;
 		datalen = sizeof(*cmlds);
 		break;
-	case MID_PORT_CORRECTIONS_NP:
+	case MID_P_PORT_CORRECTIONS_NP:
 		pcn = (struct port_corrections_np *)tlv->data;
 		pcn->egressLatency = target->tx_timestamp_offset;
 		pcn->ingressLatency = target->rx_timestamp_offset;
@@ -1180,7 +1177,7 @@ static int port_management_fill_response(struct port *target,
 		break;
 	default:
 		/* The caller should *not* respond to this message. */
-		tlv_extra_recycle(extra);
+		free(extra);
 		return 0;
 	}
 
@@ -1228,12 +1225,12 @@ static int port_management_set(struct port *target,
 	tlv = (struct management_tlv *) req->management.suffix;
 
 	switch (id) {
-	case MID_PORT_DATA_SET_NP:
+	case MID_P_PORT_DATA_SET_NP:
 		pdsnp = (struct port_ds_np *) tlv->data;
 		target->neighborPropDelayThresh = pdsnp->neighborPropDelayThresh;
 		respond = 1;
 		break;
-	case MID_POWER_PROFILE_SETTINGS_NP:
+	case MID_P_POWER_PROFILE_SETTINGS_NP:
 		pwr = (struct ieee_c37_238_settings_np *) tlv->data;
 		switch (pwr->version) {
 		case IEEE_C37_238_VERSION_NONE:
@@ -1244,7 +1241,7 @@ static int port_management_set(struct port *target,
 			break;
 		}
 		break;
-	case MID_PORT_CORRECTIONS_NP:
+	case MID_P_PORT_CORRECTIONS_NP:
 		pcn = (struct port_corrections_np *) tlv->data;
 		target->tx_timestamp_offset = pcn->egressLatency;
 		target->rx_timestamp_offset = pcn->ingressLatency;
@@ -1590,7 +1587,7 @@ static int port_cmlds_renew(struct port *p, time_t now)
 	int err;
 
 	event_bitmask_set(sen.bitmask, NOTIFY_CMLDS, TRUE);
-	err = pmc_send_set_action(p->cmlds.pmc, MID_SUBSCRIBE_EVENTS_NP,
+	err = pmc_send_set_action(p->cmlds.pmc, MID_C_SUBSCRIBE_EVENTS_NP,
 				  &sen, sizeof(sen));
 	if (err) {
 		return err;
@@ -2219,6 +2216,7 @@ int process_announce(struct port *p, struct ptp_message *m)
 		return result;
 	}
 
+	// 9.5.3
 	switch (p->state) {
 	case PS_INITIALIZING:
 	case PS_FAULTY:
@@ -2264,13 +2262,13 @@ static int process_cmlds(struct port *p)
 		goto out;
 	}
 	mgt = (struct management_tlv *) msg->management.suffix;
-	if (mgt->length == 2 && mgt->id != MID_NULL_MANAGEMENT) {
+	if (mgt->length == 2 && mgt->id != MID_P_NULL_MANAGEMENT) {
 		pr_err("%s: pmc_recv bad length", p->log_name);
 		goto out;
 	}
 
 	switch (mgt->id) {
-	case MID_CMLDS_INFO_NP:
+	case MID_P_CMLDS_INFO_NP:
 		if (msg->header.sourcePortIdentity.portNumber != p->cmlds.port) {
 			break;
 		}
@@ -2285,7 +2283,7 @@ static int process_cmlds(struct port *p)
 			clock_peer_delay(p->clock, p->peer_delay, tx, tx, p->nrate.ratio);
 		}
 		break;
-	case MID_SUBSCRIBE_EVENTS_NP:
+	case MID_C_SUBSCRIBE_EVENTS_NP:
 		break;
 	default:
 		pr_err("%s: pmc_recv bad mgt id 0x%x", p->log_name, mgt->id);
@@ -3398,28 +3396,28 @@ int port_manage(struct port *p, struct port *ingress, struct ptp_message *msg)
 	}
 
 	switch (mgt->id) {
-	case MID_NULL_MANAGEMENT:
-	case MID_CLOCK_DESCRIPTION:
-	case MID_PORT_DATA_SET:
-	case MID_LOG_ANNOUNCE_INTERVAL:
-	case MID_ANNOUNCE_RECEIPT_TIMEOUT:
-	case MID_LOG_SYNC_INTERVAL:
-	case MID_VERSION_NUMBER:
-	case MID_ENABLE_PORT:
-	case MID_DISABLE_PORT:
-	case MID_UNICAST_NEGOTIATION_ENABLE:
-	case MID_UNICAST_MASTER_TABLE:
-	case MID_UNICAST_MASTER_MAX_TABLE_SIZE:
-	case MID_ACCEPTABLE_MASTER_TABLE_ENABLED:
-	case MID_ALTERNATE_MASTER:
-	case MID_MASTER_ONLY:
-	case MID_TRANSPARENT_CLOCK_PORT_DATA_SET:
-	case MID_DELAY_MECHANISM:
-	case MID_LOG_MIN_PDELAY_REQ_INTERVAL:
-		port_management_send_error(p, ingress, msg, MID_NOT_SUPPORTED);
+	case MID_P_NULL_MANAGEMENT:
+	case MID_P_CLOCK_DESCRIPTION:
+	case MID_P_PORT_DATA_SET:
+	case MID_P_LOG_ANNOUNCE_INTERVAL:
+	case MID_P_ANNOUNCE_RECEIPT_TIMEOUT:
+	case MID_P_LOG_SYNC_INTERVAL:
+	case MID_P_VERSION_NUMBER:
+	case MID_P_ENABLE_PORT:
+	case MID_P_DISABLE_PORT:
+	case MID_P_UNICAST_NEGOTIATION_ENABLE:
+	case MID_P_UNICAST_MASTER_TABLE:
+	case MID_P_UNICAST_MASTER_MAX_TABLE_SIZE:
+	case MID_P_ACCEPTABLE_MASTER_TABLE_ENABLED:
+	case MID_P_ALTERNATE_MASTER:
+	case MID_P_MASTER_ONLY:
+	case MID_P_TRANSPARENT_CLOCK_PORT_DATA_SET:
+	case MID_P_DELAY_MECHANISM:
+	case MID_P_LOG_MIN_PDELAY_REQ_INTERVAL:
+		port_management_send_error(p, ingress, msg, MID_E_NOT_SUPPORTED);
 		break;
 	default:
-		port_management_send_error(p, ingress, msg, MID_NO_SUCH_ID);
+		port_management_send_error(p, ingress, msg, MID_E_NO_SUCH_ID);
 		return -1;
 	}
 	return 1;
@@ -3523,10 +3521,10 @@ void port_notify_event(struct port *p, enum notification event)
 
 	switch (event) {
 	case NOTIFY_PORT_STATE:
-		id = MID_PORT_DATA_SET;
+		id = MID_P_PORT_DATA_SET;
 		break;
 	case NOTIFY_CMLDS:
-		id = MID_CMLDS_INFO_NP;
+		id = MID_P_CMLDS_INFO_NP;
 		break;
 	default:
 		return;
