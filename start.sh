@@ -13,6 +13,9 @@ OPTIONS:
                     accel-ppp will start with gdb
   -s/--server       server mode
   -c/--client       client mode
+  -i/--if           interface name
+                        default: eth0
+  -f/--file         config file
   -2                IEEE 802.3
   -4                UDP IPv4(default)
   -6                UDP IPv6
@@ -42,13 +45,17 @@ GDB=
 APP=$ROOT_DIR/ptp4l
 PROTO="-4"
 CLIENT=
-ARGS="-m -S -l $LOG $PROTO -i $IF"
+CONFIG=
 
 for i in "$@"
 do
 case $i in
     -h|--help)
         usage
+    shift
+    ;;
+    -i=*|--if=*)
+        IF="${i#*=}"
     shift
     ;;
     -s|--server)
@@ -75,6 +82,10 @@ case $i in
         LOG_LEVEL="${i#*=}"
     shift
     ;;
+    -f=*|--file=*)
+        CONFIG="${i#*=}"
+    shift
+    ;;
     -g|--gdb)
         GDB=ON
     shift
@@ -87,6 +98,10 @@ esac
 done
 
 ARGS="-m -S $CLIENT -l $LOG_LEVEL $PROTO -i $IF"
+
+if [ ! -z $CONFIG ]; then
+    ARGS="$ARGS -f $CONFIG"
+fi
 
 check_veth 0 1
 if [ ! -z $GDB ]; then

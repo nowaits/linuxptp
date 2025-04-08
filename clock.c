@@ -2122,10 +2122,10 @@ enum servo_state clock_synchronize(struct clock *c, tmv_t ingress, tmv_t origin)
 	if (c->stats.max_count > 1) {
 		clock_stats_update(&c->stats, tmv_dbl(c->master_offset), adj);
 	} else {
-		pr_info("master offset %10" PRId64 " s%d freq %+7.0f "
-			"path delay %9" PRId64,
-			tmv_to_nanoseconds(c->master_offset), state, adj,
-			tmv_to_nanoseconds(c->path_delay));
+		pr_info("master offset %10.3lf s%d "
+			"path delay %9.3lf freq %+7.0f",
+			tmv_to_nanoseconds(c->master_offset) / 1e3, state,
+			tmv_to_nanoseconds(c->path_delay) / 1e3, adj);
 	}
 
 	clock_notify_event(c, NOTIFY_TIME_SYNC);
