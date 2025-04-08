@@ -408,20 +408,18 @@ static int raw_recv(struct transport *t, int fd, void *buf, int buflen,
 		    struct address *addr, struct hw_timestamp *hwts)
 {
 	struct raw *raw = container_of(t, struct raw, t);
-	unsigned char *ptr = buf;
 	struct eth_hdr *hdr;
 	int cnt, hlen;
+	unsigned char pkt[1600];
 
 	if (raw->vlan) {
 		hlen = sizeof(struct vlan_hdr);
 	} else {
 		hlen = sizeof(struct eth_hdr);
 	}
-	ptr    -= hlen;
-	buflen += hlen;
-	hdr = (struct eth_hdr *) ptr;
 
-	cnt = sk_receive(fd, ptr, buflen, addr, hwts, MSG_DONTWAIT);
+	hdr = (struct eth_hdr *) pkt;
+	cnt = sk_receive(fd, pkt, sizeof(pkt), addr, hwts, MSG_DONTWAIT);
 
 	if (cnt >= 0)
 		cnt -= hlen;
@@ -442,6 +440,9 @@ static int raw_recv(struct transport *t, int fd, void *buf, int buflen,
 			raw->vlan = 1;
 		}
 	}
+
+	memcpy(buf, (void*)(hdr + 1), 
+		buflen > sizeof(pkt) - hlen ? sizeof(pkt) - hlen : buflen);
 	return cnt;
 }
 
@@ -451,7 +452,7 @@ static int raw_send(struct transport *t, struct fdarray *fda,
 {
 	struct raw *raw = container_of(t, struct raw, t);
 	ssize_t cnt;
-	unsigned char pkt[1600], *ptr = buf;
+	unsigned char pkt[1600], *ptr = pkt;
 	struct eth_hdr *hdr;
 	int fd = -1;
 
@@ -467,9 +468,6 @@ static int raw_send(struct transport *t, struct fdarray *fda,
 		break;
 	}
 
-	ptr -= sizeof(*hdr);
-	len += sizeof(*hdr);
-
 	if (!addr)
 		addr = peer ? &raw->p2p_addr : &raw->ptp_addr;
 
@@ -478,8 +476,11 @@ static int raw_send(struct transport *t, struct fdarray *fda,
 	addr_to_mac(&hdr->src, &raw->src_addr);
 
 	hdr->type = htons(ETH_P_1588);
+	ptr += sizeof(*hdr);
+	len += sizeof(*hdr);
+	memcpy(ptr, buf, len);
 
-	cnt = send(fd, ptr, len, 0);
+	cnt = send(fd, pkt, len, 0);
 	if (cnt < 1) {
 		return -errno;
 	}
