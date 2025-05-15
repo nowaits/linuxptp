@@ -1539,7 +1539,8 @@ static void port_syfufsm(struct port *p, enum syfu_event event,
 					 syn->header.correction,
 					 m->header.correction,
 					 m->header.logMessageInterval);
-			msg_put(p->last_syncfup);
+			if (p->syfu != SF_EMPTY)
+				msg_put(p->last_syncfup);
 			p->syfu = SF_EMPTY;
 			break;
 		}
@@ -1562,7 +1563,8 @@ static void port_syfufsm(struct port *p, enum syfu_event event,
 					 m->header.correction,
 					 fup->header.correction,
 					 m->header.logMessageInterval);
-			msg_put(p->last_syncfup);
+			if (p->syfu != SF_EMPTY)
+				msg_put(p->last_syncfup);
 			p->syfu = SF_EMPTY;
 			break;
 		case FUP_MISMATCH:
