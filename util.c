@@ -783,7 +783,7 @@ int rate_limited(int interval, time_t *last)
 {
 	struct timespec ts;
 
-	if (clock_gettime(CLOCK_MONOTONIC, &ts))
+	if (do_clock_gettime(CLOCK_MONOTONIC, &ts))
 		return 1;
 	if (*last + interval > ts.tv_sec)
 		return 1;

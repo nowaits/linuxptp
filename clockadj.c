@@ -23,9 +23,16 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "clock.h"
 #include "clockadj.h"
 #include "missing.h"
 #include "print.h"
+#if USE_KTIME
+#include <ktime.h>
+#define ADJTIMEX(a) ktime_adjtimex(a)
+#else
+#define ADJTIMEX(a) adjtimex(a)
+#endif
 
 #define NS_PER_SEC 1000000000LL
 
@@ -33,8 +40,23 @@ static int realtime_leap_bit;
 static long realtime_hz;
 static long realtime_nominal_tick;
 
+static int do_clock_adjtime(clockid_t clkid, struct timex* tx)
+{
+	if (clkid != CLOCK_REALTIME) {
+		return clock_adjtime(clkid, tx);
+	}
+
+	return ADJTIMEX(tx);
+}
+
+
 void clockadj_init(clockid_t clkid)
 {
+#if USE_KTIME
+	realtime_hz = USER_HZ;
+	realtime_nominal_tick = (USEC_PER_SEC + USER_HZ / 2) / USER_HZ;
+	return;
+#endif
 #ifdef _SC_CLK_TCK
 	if (clkid == CLOCK_REALTIME) {
 		/* This is USER_HZ in the kernel. */
@@ -62,7 +84,7 @@ int clockadj_set_freq(clockid_t clkid, double freq)
 
 	tx.modes |= ADJ_FREQUENCY;
 	tx.freq = (long) (freq * 65.536);
-	if (clock_adjtime(clkid, &tx) < 0) {
+	if (do_clock_adjtime(clkid, &tx) < 0) {
 		pr_err("failed to adjust the clock: %m");
 		return -1;
 	}
@@ -72,9 +94,9 @@ int clockadj_set_freq(clockid_t clkid, double freq)
 double clockadj_get_freq(clockid_t clkid)
 {
 	double f = 0.0;
-	struct timex tx;
-	memset(&tx, 0, sizeof(tx));
-	if (clock_adjtime(clkid, &tx) < 0) {
+	struct timex tx = {0};
+
+	if (do_clock_adjtime(clkid, &tx) < 0) {
 		pr_err("failed to read out the clock frequency adjustment: %m");
 		exit(1);
 	} else {
@@ -92,7 +114,7 @@ int clockadj_set_phase(clockid_t clkid, long offset)
 
 	tx.modes = ADJ_OFFSET | ADJ_NANO;
 	tx.offset = offset;
-	if (clock_adjtime(clkid, &tx) < 0) {
+	if (do_clock_adjtime(clkid, &tx) < 0) {
 		pr_err("failed to set the clock offset: %m");
 		return -1;
 	}
@@ -119,10 +141,11 @@ int clockadj_step(clockid_t clkid, int64_t step)
 		tx.time.tv_sec  -= 1;
 		tx.time.tv_usec += 1000000000;
 	}
-	if (clock_adjtime(clkid, &tx) < 0) {
+	if (do_clock_adjtime(clkid, &tx) < 0) {
 		pr_err("failed to step clock: %m");
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -132,7 +155,7 @@ int clockadj_max_freq(clockid_t clkid)
 	struct timex tx;
 
 	memset(&tx, 0, sizeof(tx));
-	if (clock_adjtime(clkid, &tx) < 0)
+	if (do_clock_adjtime(clkid, &tx) < 0)
 		pr_err("failed to read out the clock maximum adjustment: %m");
 	else
 		f = tx.tolerance / 65.536;
@@ -159,9 +182,9 @@ int clockadj_compare(clockid_t clkid, clockid_t sysclk, int readings,
 
 	/* Pick the quickest clkid reading. */
 	for (i = 0; i < readings; i++) {
-		if (clock_gettime(sysclk, &tdst1) ||
-				clock_gettime(clkid, &tsrc) ||
-				clock_gettime(sysclk, &tdst2)) {
+		if (do_clock_gettime(sysclk, &tdst1) ||
+			do_clock_gettime(clkid, &tsrc) ||
+			do_clock_gettime(sysclk, &tdst2)) {
 			pr_err("failed to read clock: %m");
 			return -errno;
 		}
@@ -200,7 +223,7 @@ void sysclk_set_leap(int leap)
 	default:
 		tx.status = 0;
 	}
-	if (clock_adjtime(clkid, &tx) < 0)
+	if (do_clock_adjtime(clkid, &tx) < 0)
 		pr_err("failed to set the clock status: %m");
 	else if (m)
 		pr_notice("%s", m);
@@ -214,7 +237,7 @@ void sysclk_set_tai_offset(int offset)
 	memset(&tx, 0, sizeof(tx));
 	tx.modes = ADJ_TAI;
 	tx.constant = offset;
-	if (clock_adjtime(clkid, &tx) < 0)
+	if (do_clock_adjtime(clkid, &tx) < 0)
 		pr_err("failed to set TAI offset: %m");
 }
 
@@ -233,6 +256,6 @@ void sysclk_set_sync(void)
 	   to avoid getting the STA_UNSYNC flag back. */
 	tx.modes = ADJ_STATUS | ADJ_MAXERROR;
 	tx.status = realtime_leap_bit;
-	if (clock_adjtime(clkid, &tx) < 0)
+	if (do_clock_adjtime(clkid, &tx) < 0)
 		pr_err("failed to set clock status and maximum error: %m");
 }

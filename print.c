@@ -66,7 +66,7 @@ void print(int level, char const *format, ...)
 	if (level > print_level)
 		return;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	do_clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	va_start(ap, format);
 	vsnprintf(buf, sizeof(buf), format, ap);

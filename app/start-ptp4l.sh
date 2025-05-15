@@ -20,7 +20,7 @@ OPTIONS:
   -4                UDP IPv4(default)
   -6                UDP IPv6
   -l/--log-level    log level(0-7)
-                        default 7
+                        default 6
   -h/--help         help
 EOF
     exit 1
@@ -40,7 +40,7 @@ fi
 }
 
 IF=eth0
-LOG_LEVEL=7
+LOG_LEVEL=6
 GDB=
 APP=$ROOT_DIR/ptp4l
 PROTO="-4"
@@ -98,12 +98,20 @@ esac
 done
 
 ARGS="-m -S $CLIENT -l $LOG_LEVEL $PROTO -i $IF"
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ROOT_DIR/../lib
+
+ASAN_ARGS="verbosity=0:$ASAN_ARGS"
+ASAN_ARGS="detect_leaks=1:$ASAN_ARGS"
+ASAN_ARGS="print_stats=1:$ASAN_ARGS"
+ASAN_ARGS="abort_on_error=1:$ASAN_ARGS"
 
 if [ ! -z $CONFIG ]; then
     ARGS="$ARGS -f $CONFIG"
 fi
 
 check_veth 0 1
+echo 1 > /proc/sys/net/ipv4/conf/all/accept_local
+
 if [ ! -z $GDB ]; then
 GDB_FILE=/tmp/gdb-$HASH_ID.conf
 
@@ -126,6 +134,9 @@ EOF
 
 echo "r" >> $GDB_FILE;
 
+env \
+    LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+    ASAN_OPTIONS=$ASAN_ARGS \
 gdb \
     -iex "set confirm off" \
     -iex "set pagination off" \
@@ -133,5 +144,8 @@ gdb \
     -iex "set auto-load safe-path /" \
     -x $GDB_FILE $APP
 else
+env \
+    LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+    ASAN_OPTIONS=$ASAN_ARGS \
 $APP $ARGS
 fi

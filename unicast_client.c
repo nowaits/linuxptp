@@ -137,7 +137,7 @@ static int unicast_client_peer_renew(struct port *p)
 	if (!p->unicast_master_table->peer_name) {
 		return 0;
 	}
-	err = clock_gettime(CLOCK_MONOTONIC, &now);
+	err = do_clock_gettime(CLOCK_MONOTONIC, &now);
 	if (err) {
 		pr_err("clock_gettime failed: %m");
 		return err;
@@ -174,7 +174,7 @@ static int unicast_client_renew(struct port *p,
 	struct timespec now;
 	int err;
 
-	err = clock_gettime(CLOCK_MONOTONIC, &now);
+	err = do_clock_gettime(CLOCK_MONOTONIC, &now);
 	if (err) {
 		pr_err("clock_gettime failed: %m");
 		return err;
@@ -228,7 +228,7 @@ static void unicast_client_set_renewal(struct port *p,
 	struct timespec now;
 	time_t tmo;
 
-	if (clock_gettime(CLOCK_MONOTONIC, &now)) {
+	if (do_clock_gettime(CLOCK_MONOTONIC, &now)) {
 		pr_err("clock_gettime failed: %m");
 		return;
 	}
