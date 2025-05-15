@@ -22,6 +22,8 @@
 
 #include <syslog.h>
 
+#include <libgen.h>
+
 #include "util.h"
 
 #define PRINT_LEVEL_MIN LOG_EMERG
@@ -54,10 +56,20 @@ static inline int print_get_level(void)
     return print_level;
 }
 
+#ifdef NDEBUG
+    /**
+    *
+    * @note: 限制release下日志的量
+    *
+    */
+    #define LOG_FILE_NAME basename(__FILE__)
+#else
+    #define LOG_FILE_NAME __FILE__
+#endif
 
 #define LOG_PRINT(l, _fmt, args...)                    \
     print(l, "[%s:%d %s] %s "_fmt"%c",              \
-        __FILE__, __LINE__,  \
+        LOG_FILE_NAME, __LINE__,  \
         __FUNCTION__, _ls, ##args,                  \
         ' ');  \
 

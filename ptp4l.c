@@ -37,6 +37,42 @@
 #include "util.h"
 #include "version.h"
 
+#if USE_KTIME
+#include "ktime/os_clock.h"
+#include <ktime.h>
+uint64_t read_tsc(struct clocksource *cs)
+{
+    return cpu_tsc_now();
+}
+
+struct clocksource clocksource_tsc = {
+    .name = "tsc",
+    .rating = 300,
+    .read = read_tsc,
+    .mask = CLOCKSOURCE_MASK(64),
+};
+
+void ktime_lib_init()
+{
+	uint64_t tsc_freq, clock_freq;
+
+    ktime_set_log_level("info");
+	tsc_freq = cpu_freq();
+
+    ktime_init(unix_time_now_nsec());
+    clocksource_register_khz(&clocksource_tsc, (uint32_t)(tsc_freq / 1000));
+
+    clock_freq = clocksource_freq(&clocksource_tsc);
+
+    // #2. show
+    fprintf(stderr,
+		"<ktime inited>: clock srouce freq=%.6fM\n",
+        clock_freq/1e6);
+}
+#else
+void ktime_lib_init() {}
+#endif
+
 static void usage(char *progname)
 {
 	fprintf(stderr,
@@ -77,6 +113,8 @@ int main(int argc, char *argv[])
 	struct clock *clock = NULL;
 	struct option *opts;
 	struct config *cfg;
+
+	ktime_lib_init();
 
 	if (handle_term_signals())
 		return -1;

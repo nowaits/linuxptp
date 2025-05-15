@@ -36,6 +36,9 @@
 #include "missing.h"
 #include "print.h"
 #include "sk.h"
+#if USE_KTIME
+#include <ktime.h>
+#endif
 
 /* globals */
 
@@ -435,6 +438,14 @@ int sk_receive(int fd, void *buf, int buflen,
 	msg.msg_controllen = sizeof(control);
 
 	if (flags == MSG_ERRQUEUE) {
+		if (hwts) {
+			struct timespec now;
+
+			do_clock_gettime(CLOCK_REALTIME, &now);
+			hwts->ts = timespec_to_tmv(now);
+			return 1;
+		}
+
 		struct pollfd pfd = { fd, sk_events, 0 };
 		res = poll(&pfd, 1, sk_tx_timeout);
 		/* Retry once on EINTR to avoid logging errors before exit */
@@ -461,6 +472,8 @@ int sk_receive(int fd, void *buf, int buflen,
 		pr_err("recvmsg%sfailed: %m",
 		       flags == MSG_ERRQUEUE ? " tx timestamp " : " ");
 	}
+	
+#if !USE_KTIME
 	for (cm = CMSG_FIRSTHDR(&msg); cm != NULL; cm = CMSG_NXTHDR(&msg, cm)) {
 		level = cm->cmsg_level;
 		type  = cm->cmsg_type;
@@ -502,6 +515,15 @@ int sk_receive(int fd, void *buf, int buflen,
 		hwts->ts = timespec_to_tmv(ts[1]);
 		break;
 	}
+#else
+	{
+		struct timespec now;
+
+		do_clock_gettime(CLOCK_REALTIME, &now);
+		hwts->ts = hwts->sw = timespec_to_tmv(now);
+	}
+#endif
+
 	return cnt < 0 ? -errno : cnt;
 }
 
@@ -561,6 +583,9 @@ int sk_timestamping_init(int fd, const char *device, enum timestamp_type type,
 	int err, filter1, filter2 = 0, flags, tx_type = HWTSTAMP_TX_ON;
 	struct so_timestamping timestamping;
 
+#if USE_KTIME
+	return 0;
+#endif
 	switch (type) {
 	case TS_SOFTWARE:
 		flags = SOF_TIMESTAMPING_TX_SOFTWARE |

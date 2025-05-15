@@ -347,7 +347,7 @@ int msg_post_recv(struct ptp_message *m, int cnt)
 		port_id_post_recv(&m->pdelay_resp_fup.requestingPortIdentity);
 		break;
 	case ANNOUNCE:
-		clock_gettime(CLOCK_MONOTONIC, &m->ts.host);
+		do_clock_gettime(CLOCK_MONOTONIC, &m->ts.host);
 		timestamp_post_recv(m, &m->announce.originTimestamp);
 		announce_post_recv(&m->announce);
 		break;
@@ -383,7 +383,7 @@ int msg_pre_send(struct ptp_message *m)
 	case SYNC:
 		break;
 	case DELAY_REQ:
-		clock_gettime(CLOCK_MONOTONIC, &m->ts.host);
+		do_clock_gettime(CLOCK_MONOTONIC, &m->ts.host);
 		break;
 	case PDELAY_REQ:
 		break;

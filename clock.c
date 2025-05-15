@@ -47,7 +47,25 @@
 #include "uds.h"
 #include "util.h"
 
+#if USE_KTIME
+#include <ktime.h>
+#endif
+
 #define N_CLOCK_PFD (N_POLLFD + 1) /* one extra per port, for the fault timer */
+
+int do_clock_gettime(clockid_t clk_id, struct timespec *tp)
+{
+#if USE_KTIME
+	if (clk_id == CLOCK_MONOTONIC) {
+		*tp = ktime_mono_time();
+	} else if (clk_id == CLOCK_REALTIME) {
+		*tp = ktime_real_time();
+	}
+	return 0;
+#else
+	return clock_gettime(clk_id, tp);
+#endif
+}
 
 struct interface {
 	STAILQ_ENTRY(interface) list;
@@ -257,7 +275,7 @@ static void clock_update_subscription(struct clock *c, struct ptp_message *req,
 				/* Update transport address and event mask. */
 				s->addr = req->address;
 				memcpy(s->events, bitmask, EVENT_BITMASK_CNT);
-				clock_gettime(CLOCK_MONOTONIC, &now);
+				do_clock_gettime(CLOCK_MONOTONIC, &now);
 				/* Subscription will not expire if the duration is set to UINT16_MAX. */
 				s->expiration = duration != UINT16_MAX ? now.tv_sec + duration : 0;
 			} else {
@@ -277,7 +295,7 @@ static void clock_update_subscription(struct clock *c, struct ptp_message *req,
 	s->targetPortIdentity = req->header.sourcePortIdentity;
 	s->addr = req->address;
 	memcpy(s->events, bitmask, EVENT_BITMASK_CNT);
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 	/* Subscription will not expire if the duration is set to UINT16_MAX. */
 	s->expiration = duration != UINT16_MAX ? now.tv_sec + duration : 0;
 	s->sequenceId = 0;
@@ -294,7 +312,7 @@ static void clock_get_subscription(struct clock *c, struct ptp_message *req,
 		if (pid_eq(&s->targetPortIdentity,
 			   &req->header.sourcePortIdentity)) {
 			memcpy(bitmask, s->events, EVENT_BITMASK_CNT);
-			clock_gettime(CLOCK_MONOTONIC, &now);
+			do_clock_gettime(CLOCK_MONOTONIC, &now);
 			if (s->expiration < now.tv_sec)
 				*duration = 0;
 			else
@@ -321,7 +339,7 @@ static void clock_prune_subscriptions(struct clock *c)
 	struct clock_subscriber *s, *tmp;
 	struct timespec now;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 	LIST_FOREACH_SAFE(s, &c->subscribers, list, tmp) {
 		if (s->expiration != 0 && s->expiration <= now.tv_sec) {
 			pr_info("subscriber %s timed out",
@@ -1124,7 +1142,7 @@ struct clock *clock_create(enum clock_type type, struct config *config,
 	struct interface *iface;
 	struct timespec ts;
 
-	clock_gettime(CLOCK_REALTIME, &ts);
+	do_clock_gettime(CLOCK_REALTIME, &ts);
 	srandom(ts.tv_sec ^ ts.tv_nsec);
 
 	if (c->nports) {
@@ -2186,7 +2204,7 @@ void clock_update_leap_status(struct clock *c)
 		return;
 	}
 
-	clock_gettime(c->clkid, &ts);
+	do_clock_gettime(c->clkid, &ts);
 	if (c->time_flags & PTP_TIMESCALE) {
 		ts.tv_sec -= c->utc_offset;
 	}

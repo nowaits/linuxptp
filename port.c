@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <malloc.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -320,7 +321,7 @@ static void fc_prune(struct foreign_clock *fc)
 	struct timespec now;
 	struct ptp_message *m;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 
 	while (fc->n_messages > FOREIGN_MASTER_THRESHOLD) {
 		m = TAILQ_LAST(&fc->messages, messages);
@@ -353,7 +354,7 @@ void delay_req_prune(struct port *p)
 {
 	struct timespec now;
 	struct ptp_message *m;
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 
 	while (!TAILQ_EMPTY(&p->delay_req)) {
 		m = TAILQ_LAST(&p->delay_req, delay_req);
@@ -1606,7 +1607,7 @@ static enum fsm_event port_cmlds_timeout(struct port *p)
 	if (!p->cmlds.pmc) {
 		return EV_NONE;
 	}
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 	if (now.tv_sec - p->cmlds.last_renewal > CMLDS_UPDATE_INTERVAL) {
 		err = port_cmlds_renew(p, now.tv_sec);
 		if (err) {
@@ -1990,7 +1991,7 @@ static int port_cmlds_initialize(struct port *p)
 	}
 	p->cmlds.timer_count = 0;
 	p->fda.fd[FD_CMLDS] = pmc_get_transport_fd(p->cmlds.pmc);
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 	return port_cmlds_renew(p, now.tv_sec);
 }
 

@@ -54,7 +54,7 @@ clockid_t phc_open(const char *phc)
 
 	clkid = FD_TO_CLOCKID(fd);
 	/* check if clkid is valid */
-	if (clock_gettime(clkid, &ts)) {
+	if (do_clock_gettime(clkid, &ts)) {
 		close(fd);
 		return CLOCK_INVALID;
 	}

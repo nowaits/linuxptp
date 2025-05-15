@@ -123,7 +123,7 @@ static void initialize_interval(struct unicast_service_interval *interval,
 {
 	LIST_INIT(&interval->clients);
 	interval->incr = log_to_timespec(log_period);
-	clock_gettime(CLOCK_MONOTONIC, &interval->tmo);
+	do_clock_gettime(CLOCK_MONOTONIC, &interval->tmo);
 	interval->tmo.tv_nsec += 10000000;
 	timespec_normalize(&interval->tmo);
 	interval->log_period = log_period;
@@ -192,7 +192,7 @@ static int unicast_service_clients(struct port *p,
 	struct timespec now;
 	int err = 0;
 
-	err = clock_gettime(CLOCK_MONOTONIC, &now);
+	err = do_clock_gettime(CLOCK_MONOTONIC, &now);
 	if (err) {
 		pr_err("clock_gettime failed: %m");
 		return err;
@@ -231,7 +231,7 @@ static void unicast_service_extend(struct unicast_client_address *client,
 	time_t tmo;
 	int err;
 
-	err = clock_gettime(CLOCK_MONOTONIC, &now);
+	err = do_clock_gettime(CLOCK_MONOTONIC, &now);
 	if (err) {
 		pr_err("clock_gettime failed: %m");
 		return;
@@ -521,7 +521,7 @@ int unicast_service_timer(struct port *p)
 	if (!p->unicast_service) {
 		return 0;
 	}
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	do_clock_gettime(CLOCK_MONOTONIC, &now);
 
 	switch (p->state) {
 	case PS_INITIALIZING:
